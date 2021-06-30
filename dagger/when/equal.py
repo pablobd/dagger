@@ -1,4 +1,4 @@
-"""Input retrieved from the output of another node."""
+"""Compare the value of a node input with a literal."""
 
 from typing import Any, Dict
 

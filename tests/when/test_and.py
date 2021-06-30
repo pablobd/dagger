@@ -22,7 +22,7 @@ def test__evaluate_condition_when_all_are_true():
 
 
 def test__evaluate_condition_when_at_least_one_is_false():
-    clause = And(Equal("x", 1), Equal("y", 2))
+    clause = And(Equal("x", 1), Equal("y", 1), Equal("y", 2))
     assert not clause.evaluate_condition({"x": 1, "y": 1})
 
 

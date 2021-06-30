@@ -2,6 +2,7 @@ import pytest
 
 import dagger.input as input
 import dagger.output as output
+import dagger.when as when
 from dagger.dag import DAG, CyclicDependencyError, DAGOutput
 from dagger.serializer import DefaultSerializer
 from dagger.task import Task
@@ -221,6 +222,20 @@ def test__init__with_nested_dags():
     # Then, no validation exceptions are raised
 
 
+def test__init__with_input_and_when_clause_mismatch():
+    with pytest.raises(TypeError) as e:
+        DAG(
+            {"single-node": Task(lambda: 1)},
+            inputs={"x": input.FromParam()},
+            when=when.And(when.Equal("y", 2), when.NotEqual("z", 1)),
+        )
+
+    assert (
+        str(e.value)
+        == "The when clause depends on the following parameters: ['y', 'z']. However, the node only declares the following inputs: ['x']."
+    )
+
+
 #
 # Node execution order
 #
@@ -321,3 +336,18 @@ def test__runtime_options__returns_specified_options():
         runtime_options=options,
     )
     assert dag.runtime_options == options
+
+
+def test__when__returns_true_by_default():
+    dag = DAG({"my-node": Task(lambda: 1)})
+    assert dag.when.evaluate_condition({})
+
+
+def test__when__returns_specified_clause():
+    when_clause = when.Equal("x", 1)
+    dag = DAG(
+        {"my-node": Task(lambda: 1)},
+        inputs={"x": input.FromParam()},
+        when=when_clause,
+    )
+    assert dag.when == when_clause

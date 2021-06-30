@@ -1,4 +1,4 @@
-"""Input retrieved from the output of another node."""
+"""Compare the value of a node input with a value and expect the input to be less than the value."""
 
 from typing import Any, Dict
 

@@ -7,6 +7,7 @@ from dagger.input import FromNodeOutput, FromParam
 from dagger.input import validate_name as validate_input_name
 from dagger.output import FromKey, FromProperty, FromReturnValue
 from dagger.output import validate_name as validate_output_name
+from dagger.when import Always, When, validate_when_clause_dependencies
 
 SupportedInputs = Union[
     FromParam,
@@ -29,6 +30,7 @@ class Task:
         inputs: Mapping[str, SupportedInputs] = None,
         outputs: Mapping[str, SupportedOutputs] = None,
         runtime_options: Mapping[str, Any] = None,
+        when: When = Always,
     ):
         """
         Validate and initialize a Task.
@@ -50,6 +52,9 @@ class Task:
             A list of options to supply to all runtimes.
             This allows you to take full advantage of the features of each runtime. For instance, you can use it to manipulate node affinities and tolerations in Kubernetes.
             Check the documentation of each runtime to see potential options.
+
+        when
+            A clause to determine whether the task should be executed or skipped.
 
 
         Returns
@@ -84,11 +89,13 @@ class Task:
             _validate_output_is_supported(output_name, outputs[output_name])
 
         _validate_callable_inputs_match_defined_inputs(func, list(inputs))
+        validate_when_clause_dependencies(when, set(inputs))
 
         self._inputs = inputs
         self._outputs = outputs
         self._func = func
         self._runtime_options = runtime_options or {}
+        self._when = when
 
     @property
     def func(self) -> Callable:
@@ -110,18 +117,23 @@ class Task:
         """Get the specified runtime options."""
         return self._runtime_options
 
+    @property
+    def when(self) -> When:
+        """Get the when clause for the DAG."""
+        return self._when
+
 
 def _validate_input_is_supported(input_name, input):
     if not _is_type_supported(input, SupportedInputs):
         raise TypeError(
-            f"Input '{input_name}' is of type '{type(input).__name__}'. However, nodes only support the following types of inputs: {[t.__name__ for t in get_type_args(SupportedInputs)]}"
+            f"Input '{input_name}' is of type '{type(input).__name__}'. However, tasks only support the following types of inputs: {[t.__name__ for t in get_type_args(SupportedInputs)]}"
         )
 
 
 def _validate_output_is_supported(output_name, output):
     if not _is_type_supported(output, SupportedOutputs):
         raise TypeError(
-            f"Output '{output_name}' is of type '{type(output).__name__}'. However, nodes only support the following types of outputs: {[t.__name__ for t in get_type_args(SupportedOutputs)]}"
+            f"Output '{output_name}' is of type '{type(output).__name__}'. However, tasks only support the following types of outputs: {[t.__name__ for t in get_type_args(SupportedOutputs)]}"
         )
 
 
@@ -143,5 +155,5 @@ def _validate_callable_inputs_match_defined_inputs(
         sig.bind(**{name: None for name in input_names})
     except TypeError as e:
         raise TypeError(
-            f"This node was declared with the following inputs: {input_names}. However, the node's function has the following signature: {str(sig)}. The inputs could not be bound to the parameters because: {e.args[0]}"
+            f"This task was declared with the following inputs: {input_names}. However, the task's function has the following signature: {str(sig)}. The inputs could not be bound to the parameters because: {e.args[0]}"
         )

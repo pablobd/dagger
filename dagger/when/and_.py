@@ -1,4 +1,4 @@
-"""Input retrieved from the output of another node."""
+"""Evaluate several conditions and return true if all of them are true."""
 
 from typing import Any, Dict, List
 

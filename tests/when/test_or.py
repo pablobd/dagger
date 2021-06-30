@@ -17,7 +17,7 @@ def test__conditions():
 
 
 def test__evaluate_condition_when_all_are_false():
-    clause = Or(Equal("x", 1), Equal("y", 2))
+    clause = Or(Equal("x", 1), Equal("y", 2), Equal("y", 3))
     assert not clause.evaluate_condition({"x": 11, "y": 22})
 
 

@@ -10,6 +10,7 @@ from dagger.input import validate_name as validate_input_name
 from dagger.output import validate_name as validate_output_name
 from dagger.task import SupportedInputs as SupportedTaskInputs
 from dagger.task import Task
+from dagger.when import Always, When, validate_when_clause_dependencies
 
 VALID_NAME_REGEX = r"^[a-zA-Z0-9][a-zA-Z0-9-]{0,63}$"
 VALID_NAME = re.compile(VALID_NAME_REGEX)
@@ -48,6 +49,7 @@ class DAG:
         inputs: Mapping[str, SupportedInputs] = None,
         outputs: Mapping[str, DAGOutput] = None,
         runtime_options: Mapping[str, Any] = None,
+        when: When = Always,
     ):
         """
         Validate and initialize a DAG.
@@ -70,6 +72,9 @@ class DAG:
             A list of options to supply to all runtimes.
             This allows you to take full advantage of the features of each runtime. For instance, you can use it to manipulate node affinities and tolerations in Kubernetes.
             Check the documentation of each runtime to see potential options.
+
+        when
+            A clause to determine whether the task should be executed or skipped.
 
 
         Returns
@@ -115,11 +120,13 @@ class DAG:
 
         _validate_node_input_dependencies(nodes, inputs)
         _validate_outputs(nodes, outputs)
+        validate_when_clause_dependencies(when, set(inputs))
 
         self._nodes = nodes
         self._inputs = inputs
         self._outputs = outputs
         self._runtime_options = runtime_options or {}
+        self._when = when
         self._node_execution_order = topological_sort(
             {
                 node_name: _node_dependencies(nodes[node_name].inputs)
@@ -146,6 +153,11 @@ class DAG:
     def runtime_options(self) -> Mapping[str, Any]:
         """Get the specified runtime options."""
         return self._runtime_options
+
+    @property
+    def when(self) -> When:
+        """Get the when clause for the DAG."""
+        return self._when
 
     @property
     def node_execution_order(self) -> List[Set[str]]:

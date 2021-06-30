@@ -1,11 +1,11 @@
-"""Protocol all inputs should conform to."""
+"""Protocol all when clauses should conform to."""
 
 from typing import Any, Dict, Protocol, runtime_checkable
 
 
 @runtime_checkable
 class When(Protocol):
-    """Protocol all inputs conform to."""
+    """Protocol all when clauses conform to."""
 
     def evaluate_condition(self, params: Dict[str, Any]) -> bool:
         """

@@ -2,6 +2,7 @@ import pytest
 
 import dagger.input as input
 import dagger.output as output
+import dagger.when as when
 from dagger.serializer import DefaultSerializer
 from dagger.task import Task
 
@@ -35,7 +36,7 @@ def test__init__with_an_unsupported_input():
 
     assert (
         str(e.value)
-        == "Input 'x' is of type 'UnsupportedInput'. However, nodes only support the following types of inputs: ['FromParam', 'FromNodeOutput']"
+        == "Input 'x' is of type 'UnsupportedInput'. However, tasks only support the following types of inputs: ['FromParam', 'FromNodeOutput']"
     )
 
 
@@ -67,7 +68,7 @@ def test__init__with_an_unsupported_output():
 
     assert (
         str(e.value)
-        == "Output 'x' is of type 'UnsupportedOutput'. However, nodes only support the following types of outputs: ['FromReturnValue', 'FromKey', 'FromProperty']"
+        == "Output 'x' is of type 'UnsupportedOutput'. However, tasks only support the following types of outputs: ['FromReturnValue', 'FromKey', 'FromProperty']"
     )
 
 
@@ -85,7 +86,21 @@ def test__init__with_input_and_signature_mismatch():
 
     assert (
         str(e.value)
-        == "This node was declared with the following inputs: ['a']. However, the node's function has the following signature: (a, b). The inputs could not be bound to the parameters because: missing a required argument: 'b'"
+        == "This task was declared with the following inputs: ['a']. However, the task's function has the following signature: (a, b). The inputs could not be bound to the parameters because: missing a required argument: 'b'"
+    )
+
+
+def test__init__with_input_and_when_clause_mismatch():
+    with pytest.raises(TypeError) as e:
+        Task(
+            lambda x: x * 2,
+            inputs={"x": input.FromParam()},
+            when=when.And(when.Equal("y", 2), when.NotEqual("z", 1)),
+        )
+
+    assert (
+        str(e.value)
+        == "The when clause depends on the following parameters: ['y', 'z']. However, the node only declares the following inputs: ['x']."
     )
 
 
@@ -127,3 +142,18 @@ def test__runtime_options__returns_specified_options():
     options = {"my-runtime": {"my": "options"}}
     task = Task(lambda: 1, runtime_options=options)
     assert task.runtime_options == options
+
+
+def test__when__returns_true_by_default():
+    task = Task(lambda: 1)
+    assert task.when.evaluate_condition({})
+
+
+def test__when__returns_specified_clause():
+    when_clause = when.Equal("x", 1)
+    task = Task(
+        lambda x: x,
+        inputs=dict(x=input.FromParam()),
+        when=when_clause,
+    )
+    assert task.when == when_clause
