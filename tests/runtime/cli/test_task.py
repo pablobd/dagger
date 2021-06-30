@@ -5,6 +5,7 @@ import pytest
 
 import dagger.input as input
 import dagger.output as output
+import dagger.when as when
 from dagger.runtime.cli.task import invoke_task
 from dagger.task import Task
 
@@ -91,3 +92,27 @@ def test__invoke_task__with_multiple_inputs_and_outputs():
 
         with open(name_length_output, "rb") as f:
             assert f.read() == b"7"
+
+
+def test__invoke_task__when_skipped():
+    task = Task(
+        lambda x: x * 2,
+        inputs=dict(x=input.FromParam()),
+        outputs=dict(x=output.FromReturnValue()),
+        when=when.Equal("x", 0),
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        x_input = os.path.join(tmp, "x_input")
+        x_output = os.path.join(tmp, "x_output")
+
+        with open(x_input, "wb") as f:
+            f.write(b"1")
+
+        invoke_task(
+            task,
+            input_locations=dict(x=x_input),
+            output_locations=dict(x=x_output),
+        )
+
+        assert not os.path.exists(x_output)

@@ -1,14 +1,15 @@
 """Run tasks in memory."""
-from typing import Any, Mapping, Optional
+from typing import Mapping, Optional
 
-from dagger.serializer import SerializationError
-from dagger.task import SupportedInputs, SupportedOutputs, Task
+from dagger.runtime.local.io import _deserialize_inputs, _serialize_outputs
+from dagger.runtime.local.result import Result, Skipped, Succeeded
+from dagger.task import Task
 
 
 def invoke_task(
     task: Task,
     params: Optional[Mapping[str, bytes]] = None,
-) -> Mapping[str, bytes]:
+) -> Result:
     """
     Invoke a task with a series of parameters.
 
@@ -25,9 +26,9 @@ def invoke_task(
 
     Returns
     -------
-    Mappingionary of str -> bytes
-        Serialized outputs of the task.
-        Indexed by output name.
+    The result of the execution, which can be:
+    - Succeeded, with the serialized outputs of the task, indexed by output name.
+    - Skipped, if the task was skipped due to its 'when' clause.
 
 
     Raises
@@ -48,47 +49,11 @@ def invoke_task(
         params=params,
     )
 
+    if not task.when.evaluate_condition(inputs):
+        return Skipped(cause="When clause evaluated to False")
+
     return_value = task.func(**inputs)
 
-    return _serialize_outputs(
-        outputs=task.outputs,
-        return_value=return_value,
+    return Succeeded(
+        outputs=_serialize_outputs(outputs=task.outputs, return_value=return_value),
     )
-
-
-def _deserialize_inputs(
-    inputs: Mapping[str, SupportedInputs],
-    params: Mapping[str, bytes],
-):
-
-    deserialized_inputs = {}
-    for input_name in inputs:
-        try:
-            deserialized_inputs[input_name] = inputs[input_name].serializer.deserialize(
-                params[input_name]
-            )
-        except KeyError:
-            raise ValueError(
-                f"The parameters supplied to this task were supposed to contain a parameter named '{input_name}', but only the following parameters were actually supplied: {list(params.keys())}"
-            )
-
-    return deserialized_inputs
-
-
-def _serialize_outputs(
-    outputs: Mapping[str, SupportedOutputs],
-    return_value: Any,
-) -> Mapping[str, bytes]:
-
-    serialized_outputs = {}
-    for output_name in outputs:
-        output_type = outputs[output_name]
-        try:
-            output = output_type.from_function_return_value(return_value)
-            serialized_outputs[output_name] = output_type.serializer.serialize(output)
-        except (TypeError, ValueError, SerializationError) as e:
-            raise e.__class__(
-                f"We encountered the following error while attempting to serialize the results of this task: {str(e)}"
-            )
-
-    return serialized_outputs

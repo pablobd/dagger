@@ -1,9 +1,11 @@
+import os
 import tempfile
 
 import pytest
 
 import dagger.input as input
 import dagger.output as output
+import dagger.when as when
 from dagger.dag import DAG, DAGOutput
 from dagger.runtime.cli.dag import invoke_dag
 from dagger.task import Task
@@ -102,5 +104,35 @@ def test__invoke_dag__propagates_node_exceptions_extending_the_details():
 
     assert (
         str(e.value)
-        == "Error when invoking task 'always-1'. We encountered the following error while attempting to serialize the results of this task: This output is of type FromKey. This means we expect the return value of the function to be a mapping containing, at least, a key named 'missing-key'"
+        == "Error when invoking node 'always-1'. We encountered the following error while attempting to serialize the results of this task: This output is of type FromKey. This means we expect the return value of the function to be a mapping containing, at least, a key named 'missing-key'"
     )
+
+
+def test__invoke_dag__when_skipped():
+    dag = DAG(
+        nodes=dict(
+            square=Task(
+                lambda x: x ** 2,
+                inputs=dict(x=input.FromParam()),
+                outputs=dict(x_squared=output.FromReturnValue()),
+            ),
+        ),
+        inputs=dict(x=input.FromParam()),
+        outputs=dict(x=DAGOutput("square", "x_squared")),
+        when=when.Equal("x", 0),
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        x_input = os.path.join(tmp, "x_input")
+        x_output = os.path.join(tmp, "x_output")
+
+        with open(x_input, "wb") as f:
+            f.write(b"1")
+
+        invoke_dag(
+            dag,
+            input_locations=dict(x=x_input),
+            output_locations=dict(x=x_output),
+        )
+
+        assert not os.path.exists(x_output)

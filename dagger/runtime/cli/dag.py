@@ -1,4 +1,6 @@
 """Run DAGs taking their inputs and outputs from files."""
+
+import logging
 from typing import Mapping
 
 import dagger.runtime.local as local
@@ -59,7 +61,7 @@ def invoke_dag(
                 f"This DAG is supposed to receive a pointer to an output named '{output_name}'. However, only the following output pointers were supplied: {list(output_locations)}"
             )
 
-    outputs = local.invoke_dag(
+    result = local.invoke_dag(
         dag,
         params={
             input_name: retrieve_input_from_location(input_locations[input_name])
@@ -67,5 +69,12 @@ def invoke_dag(
         },
     )
 
+    # TODO: Test this
+    if isinstance(result, local.Skipped):
+        logging.info(f"DAG skipped due to: {result.cause}")
+        return
+
     for output_name in output_locations:
-        store_output_in_location(outputs[output_name], output_locations[output_name])
+        store_output_in_location(
+            result.outputs[output_name], output_locations[output_name]
+        )

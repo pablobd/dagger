@@ -29,6 +29,6 @@ def _when_clause_dependencies(clause: When) -> Set[str]:
             *[_when_clause_dependencies(condition) for condition in clause.conditions]
         )
     elif hasattr(clause, "param_name"):
-        return set(clause.param_name)
+        return {clause.param_name}
     else:
         return set()

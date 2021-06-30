@@ -2,7 +2,9 @@ import pytest
 
 import dagger.input as input
 import dagger.output as output
+import dagger.when as when
 from dagger import Task
+from dagger.runtime.local.result import Skipped, Succeeded
 from dagger.runtime.local.task import invoke_task
 from dagger.serializer import SerializationError
 
@@ -10,7 +12,7 @@ from dagger.serializer import SerializationError
 def test__invoke_task__without_inputs_or_outputs():
     invocations = []
     task = Task(lambda: invocations.append(1))
-    assert invoke_task(task) == {}
+    assert invoke_task(task) == Succeeded({})
     assert invocations == [1]
 
 
@@ -20,7 +22,21 @@ def test__invoke_task__with_single_input_and_output():
         inputs=dict(number=input.FromParam()),
         outputs=dict(doubled_number=output.FromReturnValue()),
     )
-    assert invoke_task(task, params=dict(number=b"2")) == dict(doubled_number=b"4")
+    assert invoke_task(task, params=dict(number=b"2")) == Succeeded(
+        dict(doubled_number=b"4")
+    )
+
+
+def test__invoke_task__when_it_is_skipped():
+    task = Task(
+        lambda number: number * 2,
+        inputs=dict(number=input.FromParam()),
+        outputs=dict(doubled_number=output.FromReturnValue()),
+        when=when.Equal("number", 0),
+    )
+    assert invoke_task(task, params=dict(number=b"2")) == Skipped(
+        "When clause evaluated to False"
+    )
 
 
 def test__invoke_task__with_multiple_inputs_and_outputs():
@@ -44,9 +60,11 @@ def test__invoke_task__with_multiple_inputs_and_outputs():
             first_name=b'"John"',
             last_name=b'"Doe"',
         ),
-    ) == dict(
-        message=b'"Hello John Doe"',
-        name_length=b"7",
+    ) == Succeeded(
+        dict(
+            message=b'"Hello John Doe"',
+            name_length=b"7",
+        )
     )
 
 

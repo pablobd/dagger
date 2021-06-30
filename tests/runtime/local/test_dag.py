@@ -2,8 +2,10 @@ import pytest
 
 import dagger.input as input
 import dagger.output as output
+import dagger.when as when
 from dagger.dag import DAG, DAGOutput
 from dagger.runtime.local.dag import invoke_dag
+from dagger.runtime.local.result import Skipped, Succeeded
 from dagger.task import Task
 
 
@@ -14,7 +16,7 @@ def test__invoke_dag__with_no_inputs_or_outputs():
             "single-task": Task(lambda: invocations.append(1)),
         }
     )
-    assert invoke_dag(dag) == {}
+    assert invoke_dag(dag) == Succeeded({})
     assert invocations == [1]
 
 
@@ -30,7 +32,18 @@ def test__invoke_dag__with_inputs_and_outputs():
         inputs=dict(x=input.FromParam()),
         outputs=dict(x_squared=DAGOutput("square", "x_squared")),
     )
-    assert invoke_dag(dag, params=dict(x=b"3")) == dict(x_squared=b"9")
+    assert invoke_dag(dag, params=dict(x=b"3")) == Succeeded(dict(x_squared=b"9"))
+
+
+def test__invoke_dag__when_it_is_skipped():
+    dag = DAG(
+        nodes=dict(square=Task(lambda: 1)),
+        inputs=dict(x=input.FromParam()),
+        when=when.Equal("x", 0),
+    )
+    assert invoke_dag(dag, params=dict(x=b"2")) == Skipped(
+        "When clause evaluated to False"
+    )
 
 
 def test__invoke_dag__with_missing_input_parameter():
@@ -63,7 +76,7 @@ def test__invoke_dag__propagates_task_exceptions_extending_the_details():
 
     assert (
         str(e.value)
-        == "Error when invoking task 'square'. We encountered the following error while attempting to serialize the results of this task: This output is of type FromKey. This means we expect the return value of the function to be a mapping containing, at least, a key named 'missing-key'"
+        == "Error when invoking node 'square'. We encountered the following error while attempting to serialize the results of this task: This output is of type FromKey. This means we expect the return value of the function to be a mapping containing, at least, a key named 'missing-key'"
     )
 
 
@@ -87,7 +100,7 @@ def test__invoke_dag__invoke_dags_nodes_in_the_right_order_based_on_their_depend
         },
         outputs=dict(n=DAGOutput("divide-number-by-three", "n")),
     )
-    assert invoke_dag(dag) == dict(n=b"27")
+    assert invoke_dag(dag) == Succeeded(dict(n=b"27"))
 
 
 def test__invoke_dag__with_nested_dags():
@@ -118,4 +131,30 @@ def test__invoke_dag__with_nested_dags():
         outputs=dict(yyyy=DAGOutput("outermost", "yyy")),
     )
 
-    assert invoke_dag(dag) == dict(yyyy=b"2")
+    assert invoke_dag(dag) == Succeeded(dict(yyyy=b"2"))
+
+
+def test__invoke_dag__when_a_node_is_skipped_and_the_next_node_depends_on_it():
+    dag = DAG(
+        nodes={
+            "first": Task(
+                lambda: 1,
+                outputs=dict(n=output.FromReturnValue()),
+            ),
+            "second": Task(
+                lambda n: n,
+                inputs=dict(n=input.FromNodeOutput("first", "n")),
+                outputs=dict(n=output.FromReturnValue()),
+                when=when.Equal("n", 0),
+            ),
+            "third": Task(
+                lambda n: 3,
+                inputs=dict(n=input.FromNodeOutput("second", "n")),
+                outputs=dict(n=output.FromReturnValue()),
+            ),
+        },
+        outputs=dict(n=DAGOutput("third", "n")),
+    )
+    assert invoke_dag(dag) == Skipped(
+        "DAG output depends on the result of node 'third', which was skipped due to: Node 'third' depends on the outputs of node 'second', but 'second' was skipped due to: When clause evaluated to False"
+    )
