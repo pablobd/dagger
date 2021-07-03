@@ -23,8 +23,7 @@ import random
 
 import dagger.input as input
 import dagger.output as output
-
-# import dagger.when as when
+import dagger.when as when
 from dagger import DAG, Task
 
 
@@ -32,7 +31,7 @@ def flip_coin() -> str:  # noqa
     return random.choice(["heads", "tails"])
 
 
-def announce_result(coin_result):  # noqa
+def announce_result(coin_result, announce):  # noqa
     print(f"It was {coin_result}!")
 
 
@@ -47,17 +46,26 @@ dag = DAG(
         "announce-heads": Task(
             announce_result,
             inputs={
+                "announce": input.FromParam(),
                 "coin_result": input.FromNodeOutput("flip-coin", "result"),
             },
-            # when=when.Equal("coin_result", "heads"),
+            when=when.And(
+                when.Equal("coin_result", "heads"), when.Equal("announce", True)
+            ),
         ),
         "announce-tails": Task(
             announce_result,
             inputs={
+                "announce": input.FromParam(),
                 "coin_result": input.FromNodeOutput("flip-coin", "result"),
             },
-            # when=when.NotEqual("coin_result", "heads"),
+            when=when.And(
+                when.NotEqual("coin_result", "heads"), when.Equal("announce", True)
+            ),
         ),
+    },
+    inputs={
+        "announce": input.FromParam(),
     },
 )
 

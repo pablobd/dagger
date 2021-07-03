@@ -1,0 +1,89 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: conditional-execution-
+spec:
+  entrypoint: dag
+  templates:
+  - name: dag
+    dag:
+      tasks:
+      - name: flip-coin
+        template: dag-flip-coin
+      - name: announce-heads
+        template: dag-announce-heads
+        dependencies: [flip-coin]
+        when: "{{tasks.flip-coin.outputs.parameters.result}} == \"heads\""
+        arguments:
+          artifacts:
+          - name: coin_result
+            from: "{{tasks.flip-coin.outputs.artifacts.result}}"
+      - name: announce-tails
+        template: dag-announce-tails
+        dependencies: [flip-coin]
+        when: "{{tasks.flip-coin.outputs.parameters.result}} != \"heads\""
+        arguments:
+          artifacts:
+          - name: coin_result
+            from: "{{tasks.flip-coin.outputs.artifacts.result}}"
+
+  - name: dag-flip-coin
+    outputs:
+      artifacts:
+      - name: result
+        path: /tmp/outputs/result.json
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/outputs/result.json
+    container:
+      image: local.registry/dagger
+      command: [conditional-execution]
+      args: [
+        --node-name, flip-coin,
+        --output, result, "{{outputs.artifacts.result.path}}"
+      ]
+      volumeMounts:
+      - name: outputs
+        mountPath: /tmp/outputs/
+    volumes:
+    - name: outputs
+      emptyDir: {}
+
+  - name: dag-announce-heads
+    inputs:
+      artifacts:
+      - name: coin_result
+        path: /tmp/inputs/coin_result.json
+    container:
+      image: local.registry/dagger
+      command: [conditional-execution]
+      args: [
+        --node-name, announce-heads,
+        --input, coin_result, "{{inputs.artifacts.coin_result.path}}",
+      ]
+      volumeMounts:
+      - name: outputs
+        mountPath: /tmp/outputs/
+    volumes:
+    - name: outputs
+      emptyDir: {}
+
+  - name: dag-announce-tails
+    inputs:
+      artifacts:
+      - name: coin_result
+        path: /tmp/inputs/coin_result.json
+    container:
+      image: local.registry/dagger
+      command: [conditional-execution]
+      args: [
+        --node-name, announce-tails,
+        --input, coin_result, "{{inputs.artifacts.coin_result.path}}",
+      ]
+      volumeMounts:
+      - name: outputs
+        mountPath: /tmp/outputs/
+    volumes:
+    - name: outputs
+      emptyDir: {}

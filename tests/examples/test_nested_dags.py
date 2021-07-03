@@ -18,5 +18,5 @@ def test():
             "style": b'"hip hop"',
         },
         validate_results=validate_results,
-        argo_workflow_yaml_filename="nested_dags.yaml",
+        argo_workflow_yaml_filename="nested_dags_2.yaml",
     )

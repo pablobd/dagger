@@ -3,7 +3,9 @@ import itertools
 import os
 from typing import Any, Dict, List, Mapping, Optional
 
-from dagger.dag import DAG, Node, validate_parameters
+from dagger.dag import DAG, Node
+from dagger.dag import SupportedInputs as SupportedDAGInputs
+from dagger.dag import validate_parameters
 from dagger.input import FromNodeOutput, FromParam
 from dagger.runtime.argo.errors import IncompatibilityError
 from dagger.task import SupportedInputs as SupportedTaskInputs
@@ -62,7 +64,7 @@ def workflow_spec(
     }
 
     if params:
-        spec["arguments"] = _workflow_spec_arguments(params)
+        spec["arguments"] = _workflow_spec_arguments(params=params, inputs=dag.inputs)
 
     if service_account:
         spec["serviceAccountName"] = service_account
@@ -70,10 +72,16 @@ def workflow_spec(
     return spec
 
 
-def _workflow_spec_arguments(params: Mapping[str, bytes]) -> Mapping[str, Any]:
+def _workflow_spec_arguments(
+    params: Mapping[str, bytes],
+    inputs: Mapping[str, SupportedDAGInputs],
+) -> Mapping[str, Any]:
     return {
-        "artifacts": [
-            {"name": param_name, "raw": {"data": params[param_name]}}
+        "parameters": [
+            {
+                "name": param_name,
+                "value": inputs[param_name].serializer.deserialize(params[param_name]),
+            }
             for param_name in params
         ],
     }
@@ -183,9 +191,7 @@ def _dag_template(
     }
 
     if dag.inputs:
-        template["inputs"] = {
-            "artifacts": [{"name": input_name} for input_name in dag.inputs]
-        }
+        template["inputs"] = _dag_template_inputs(dag.inputs)
 
     if dag.outputs:
         template["outputs"] = {
@@ -207,6 +213,33 @@ def _dag_template(
     )
 
     return template
+
+
+def _dag_template_inputs(
+    dag_inputs: Mapping[str, SupportedDAGInputs]
+) -> Mapping[str, Any]:
+    """
+    Return a minimal representation of the inputs to a Template for a DAG.
+
+    Spec: https://github.com/argoproj/argo-workflows/blob/v3.0.4/docs/fields.md#template
+    """
+    inputs = {}
+    parameters = []
+    artifacts = []
+
+    for input_name in dag_inputs:
+        if isinstance(dag_inputs[input_name], FromParam):
+            parameters.append({"name": input_name})
+        elif isinstance(dag_inputs[input_name], FromNodeOutput):
+            artifacts.append({"name": input_name})
+
+    if parameters:
+        inputs["parameters"] = parameters
+
+    if artifacts:
+        inputs["artifacts"] = artifacts
+
+    return inputs
 
 
 def _dag_task(
@@ -258,19 +291,40 @@ def _dag_task_arguments(
 
     Spec: https://github.com/argoproj/argo-workflows/blob/v3.0.4/docs/fields.md#arguments
     """
-    return {
-        "artifacts": [
-            {
-                "name": input_name,
-                "from": _dag_task_argument_artifact_from(
-                    node_address=node_address,
-                    input_name=input_name,
-                    input=node.inputs[input_name],
-                ),
-            }
-            for input_name in node.inputs
-        ]
-    }
+    arguments: dict = {}
+    parameters = []
+    artifacts = []
+
+    for input_name, input_type in node.inputs.items():
+        if isinstance(input_type, FromParam):
+            param_address = "{{inputs.parameters." + input_name + "}}"
+
+            if isinstance(node, DAG):
+                parameters.append({"name": input_name, "value": param_address})
+            else:
+                artifacts.append(
+                    {"name": input_name, "raw": {"data": f'"{param_address}"'}}
+                )
+
+        elif isinstance(input_type, FromNodeOutput):
+            artifacts.append(
+                {
+                    "name": input_name,
+                    "from": _dag_task_argument_artifact_from(
+                        node_address=node_address,
+                        input_name=input_name,
+                        input=node.inputs[input_name],
+                    ),
+                }
+            )
+
+    if parameters:
+        arguments["parameters"] = parameters
+
+    if artifacts:
+        arguments["artifacts"] = artifacts
+
+    return arguments
 
 
 def _dag_task_argument_artifact_from(

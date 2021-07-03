@@ -15,5 +15,5 @@ def test():
             "number": b"5",
         },
         validate_results=validate_results,
-        argo_workflow_yaml_filename="passing_parameters.yaml",
+        argo_workflow_yaml_filename="passing_parameters_2.yaml",
     )

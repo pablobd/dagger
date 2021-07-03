@@ -1,0 +1,83 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: passing-parameters-
+spec:
+  arguments:
+    parameters:
+    - name: number
+      value: 5
+  entrypoint: dag
+  templates:
+  - name: dag
+    inputs:
+      parameters:
+      - name: number
+    outputs:
+      artifacts:
+      - name: number-doubled-and-squared
+        from: "{{tasks.square.outputs.artifacts.squared-number}}"
+    dag:
+      tasks:
+      - name: double
+        template: dag-double
+        arguments:
+          artifacts:
+          - name: number
+            raw:
+              data: '"{{inputs.parameters.number}}"'
+      - name: square
+        template: dag-square
+        dependencies: [double]
+        arguments:
+          artifacts:
+          - name: number
+            from: "{{tasks.double.outputs.artifacts.doubled-number}}"
+
+  - name: dag-double
+    inputs:
+      artifacts:
+      - name: number
+        path: /tmp/inputs/number.json
+    outputs:
+      artifacts:
+      - name: doubled-number
+        path: /tmp/outputs/doubled-number.json
+    container:
+      image: local.registry/dagger
+      command: [passing-parameters]
+      args: [
+        --node-name, double,
+        --input, number, "{{inputs.artifacts.number.path}}",
+        --output, doubled-number, "{{outputs.artifacts.doubled-number.path}}"
+      ]
+      volumeMounts:
+      - name: outputs
+        mountPath: /tmp/outputs/
+    volumes:
+    - name: outputs
+      emptyDir: {}
+
+  - name: dag-square
+    inputs:
+      artifacts:
+      - name: number
+        path: /tmp/inputs/number.json
+    outputs:
+      artifacts:
+      - name: squared-number
+        path: /tmp/outputs/squared-number.json
+    container:
+      image: local.registry/dagger
+      command: [passing-parameters]
+      args: [
+        --node-name, square,
+        --input, number, "{{inputs.artifacts.number.path}}",
+        --output, squared-number, "{{outputs.artifacts.squared-number.path}}"
+      ]
+      volumeMounts:
+      - name: outputs
+        mountPath: /tmp/outputs/
+    volumes:
+    - name: outputs
+      emptyDir: {}

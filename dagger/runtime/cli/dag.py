@@ -69,7 +69,6 @@ def invoke_dag(
         },
     )
 
-    # TODO: Test this
     if isinstance(result, local.Skipped):
         logging.info(f"DAG skipped due to: {result.cause}")
         return

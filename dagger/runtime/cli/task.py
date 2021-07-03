@@ -69,7 +69,6 @@ def invoke_task(
         },
     )
 
-    # TODO: Test this
     if isinstance(result, local.Skipped):
         logging.info(f"Task skipped due to: {result.cause}")
         return

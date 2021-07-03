@@ -15,5 +15,5 @@ def test():
             "number": b"2",
         },
         validate_results=validate_results,
-        argo_workflow_yaml_filename="static_parallelization.yaml",
+        argo_workflow_yaml_filename="static_parallelization_2.yaml",
     )

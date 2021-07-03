@@ -1,0 +1,304 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: nested-dags-
+spec:
+  arguments:
+    parameters:
+    - name: album_name
+      value: big dag
+    - name: style
+      value: hip hop
+  entrypoint: dag
+  templates:
+  - name: dag
+    inputs:
+      parameters:
+      - name: album_name
+      - name: style
+    outputs:
+      artifacts:
+      - from: '{{tasks.publish-album.outputs.artifacts.album}}'
+        name: album
+    dag:
+      tasks:
+      - name: brainstorm-themes
+        template: dag-brainstorm-themes
+      - name: record-first-song
+        template: dag-record-first-song
+        dependencies:
+        - brainstorm-themes
+        arguments:
+          artifacts:
+          - name: theme
+            from: '{{tasks.brainstorm-themes.outputs.artifacts.first_theme}}'
+          - name: style
+            raw:
+              data: '"{{inputs.parameters.style}}"'
+      - name: record-second-song
+        template: dag-record-second-song
+        dependencies:
+        - brainstorm-themes
+        arguments:
+          artifacts:
+          - name: theme
+            from: '{{tasks.brainstorm-themes.outputs.artifacts.first_theme}}'
+          - name: style
+            raw:
+              data: '"{{inputs.parameters.style}}"'
+      - name: publish-album
+        template: dag-publish-album
+        dependencies:
+        - record-first-song
+        - record-second-song
+        arguments:
+          artifacts:
+          - name: album_name
+            raw:
+              data: '"{{inputs.parameters.album_name}}"'
+          - name: first_song
+            from: '{{tasks.record-first-song.outputs.artifacts.song}}'
+          - name: second_song
+            from: '{{tasks.record-second-song.outputs.artifacts.song}}'
+
+  - container:
+      args:
+      - --node-name
+      - brainstorm-themes
+      - --output
+      - first_theme
+      - '{{outputs.artifacts.first_theme.path}}'
+      - --output
+      - second_theme
+      - '{{outputs.artifacts.second_theme.path}}'
+      command:
+      - nested-dags
+      image: local.registry/dagger
+      volumeMounts:
+      - mountPath: /tmp/outputs/
+        name: outputs
+    name: dag-brainstorm-themes
+    outputs:
+      artifacts:
+      - name: first_theme
+        path: /tmp/outputs/first_theme.json
+      - name: second_theme
+        path: /tmp/outputs/second_theme.json
+    volumes:
+    - emptyDir: {}
+      name: outputs
+
+  - name: dag-record-first-song
+    inputs:
+      artifacts:
+      - name: theme
+      - name: style
+    outputs:
+      artifacts:
+      - from: '{{tasks.record.outputs.artifacts.recording}}'
+        name: song
+    dag:
+      tasks:
+      - arguments:
+          artifacts:
+          - name: theme
+            from: '{{inputs.artifacts.theme}}'
+          - name: style
+            from: '{{inputs.artifacts.style}}'
+        name: compose
+        template: dag-record-first-song-compose
+      - arguments:
+          artifacts:
+          - from: '{{tasks.compose.outputs.artifacts.composition}}'
+            name: composition
+        dependencies:
+        - compose
+        name: record
+        template: dag-record-first-song-record
+  - container:
+      args:
+      - --node-name
+      - record-first-song.compose
+      - --input
+      - theme
+      - '{{inputs.artifacts.theme.path}}'
+      - --input
+      - style
+      - '{{inputs.artifacts.style.path}}'
+      - --output
+      - composition
+      - '{{outputs.artifacts.composition.path}}'
+      command:
+      - nested-dags
+      image: local.registry/dagger
+      volumeMounts:
+      - mountPath: /tmp/outputs/
+        name: outputs
+    inputs:
+      artifacts:
+      - name: theme
+        path: /tmp/inputs/theme.json
+      - name: style
+        path: /tmp/inputs/style.json
+    name: dag-record-first-song-compose
+    outputs:
+      artifacts:
+      - name: composition
+        path: /tmp/outputs/composition.json
+    volumes:
+    - emptyDir: {}
+      name: outputs
+  - container:
+      args:
+      - --node-name
+      - record-first-song.record
+      - --input
+      - composition
+      - '{{inputs.artifacts.composition.path}}'
+      - --output
+      - recording
+      - '{{outputs.artifacts.recording.path}}'
+      command:
+      - nested-dags
+      image: local.registry/dagger
+      volumeMounts:
+      - mountPath: /tmp/outputs/
+        name: outputs
+    inputs:
+      artifacts:
+      - name: composition
+        path: /tmp/inputs/composition.json
+    name: dag-record-first-song-record
+    outputs:
+      artifacts:
+      - name: recording
+        path: /tmp/outputs/recording.json
+    volumes:
+    - emptyDir: {}
+      name: outputs
+  - name: dag-record-second-song
+    inputs:
+      artifacts:
+      - name: theme
+      - name: style
+    outputs:
+      artifacts:
+      - from: '{{tasks.record.outputs.artifacts.recording}}'
+        name: song
+    dag:
+      tasks:
+      - arguments:
+          artifacts:
+          - name: theme
+            from: '{{inputs.artifacts.theme}}'
+          - name: style
+            from: '{{inputs.artifacts.style}}'
+        name: compose
+        template: dag-record-second-song-compose
+      - arguments:
+          artifacts:
+          - from: '{{tasks.compose.outputs.artifacts.composition}}'
+            name: composition
+        dependencies:
+        - compose
+        name: record
+        template: dag-record-second-song-record
+  - container:
+      args:
+      - --node-name
+      - record-second-song.compose
+      - --input
+      - theme
+      - '{{inputs.artifacts.theme.path}}'
+      - --input
+      - style
+      - '{{inputs.artifacts.style.path}}'
+      - --output
+      - composition
+      - '{{outputs.artifacts.composition.path}}'
+      command:
+      - nested-dags
+      image: local.registry/dagger
+      volumeMounts:
+      - mountPath: /tmp/outputs/
+        name: outputs
+    inputs:
+      artifacts:
+      - name: theme
+        path: /tmp/inputs/theme.json
+      - name: style
+        path: /tmp/inputs/style.json
+    name: dag-record-second-song-compose
+    outputs:
+      artifacts:
+      - name: composition
+        path: /tmp/outputs/composition.json
+    volumes:
+    - emptyDir: {}
+      name: outputs
+  - container:
+      args:
+      - --node-name
+      - record-second-song.record
+      - --input
+      - composition
+      - '{{inputs.artifacts.composition.path}}'
+      - --output
+      - recording
+      - '{{outputs.artifacts.recording.path}}'
+      command:
+      - nested-dags
+      image: local.registry/dagger
+      volumeMounts:
+      - mountPath: /tmp/outputs/
+        name: outputs
+    inputs:
+      artifacts:
+      - name: composition
+        path: /tmp/inputs/composition.json
+    name: dag-record-second-song-record
+    outputs:
+      artifacts:
+      - name: recording
+        path: /tmp/outputs/recording.json
+    volumes:
+    - emptyDir: {}
+      name: outputs
+  - container:
+      args:
+      - --node-name
+      - publish-album
+      - --input
+      - album_name
+      - '{{inputs.artifacts.album_name.path}}'
+      - --input
+      - first_song
+      - '{{inputs.artifacts.first_song.path}}'
+      - --input
+      - second_song
+      - '{{inputs.artifacts.second_song.path}}'
+      - --output
+      - album
+      - '{{outputs.artifacts.album.path}}'
+      command:
+      - nested-dags
+      image: local.registry/dagger
+      volumeMounts:
+      - mountPath: /tmp/outputs/
+        name: outputs
+    inputs:
+      artifacts:
+      - name: album_name
+        path: /tmp/inputs/album_name.json
+      - name: first_song
+        path: /tmp/inputs/first_song.json
+      - name: second_song
+        path: /tmp/inputs/second_song.json
+    name: dag-publish-album
+    outputs:
+      artifacts:
+      - name: album
+        path: /tmp/outputs/album.json
+    volumes:
+    - emptyDir: {}
+      name: outputs
