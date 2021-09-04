@@ -8,6 +8,7 @@ authors = ["larribas <lorenzo.s.arribas@gmail.com>"]
 python = "^3.9"
 Sphinx = "^4.1.2"
 myst-parser = "^0.15.2"
+sphinx-rtd-theme = "1.0.0rc1"
 
 [tool.poetry.dev-dependencies]
 
